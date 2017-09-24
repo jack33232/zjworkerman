@@ -1,5 +1,5 @@
 <?php
-namespace ZJWorkerman\Exception;
+namespace ZJWorkerman\Base\Exception;
 
 use Exception;
 
