@@ -1,0 +1,42 @@
+{
+    "name": "jack33232/zjworkerman",
+    "description": "Services Lib for system based on ZJPHP & Workerman",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "jack33232",
+            "email": "jack33232@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "repositories": [
+        {
+            "type": "git",
+            "url": "https://github.com/jack33232/zjphp.git"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/jack33232/klein.php"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/jack33232/database"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/jack33232/KLogger"
+        }
+    ],
+    "require": {
+        "jack33232/zjphp": "dev-master",
+        "workerman/workerman" : ">=3.1.8",
+        "workerman/mysql": "1.0.*",
+        "bunny/bunny": "dev-master"
+    },
+    "autoload": {
+        "psr-4": {
+            "ZJWorkerman\\": ""
+        }
+    }
+}
