@@ -7,7 +7,7 @@ use ZJPHP\Base\Event;
 use ZJPHP\Base\Kit\ArrayHelper;
 use ZJPHP\Service\NotifyCenter;
 use ZJPHP\Facade\Security;
-use WorkermanApp\ManagerProxy\Facade\MQConsumer;
+use ZJWorkerman\Facade\MQConsumer;
 use League\CLImate\CLImate;
 use Workerman\Worker;
 use Workerman\Connection\AsyncTcpConnection;
