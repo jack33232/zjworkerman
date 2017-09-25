@@ -11,7 +11,7 @@ use ZJPHP\Facade\Database;
 use ZJPHP\Base\Exception\InvalidConfigException;
 use ZJPHP\Base\Exception\InvalidCallException;
 use ZJPHP\Base\Exception\InvalidParamException;
-use ZJWorkerman\Exception\MQException;
+use ZJWorkerman\Base\Exception\MQException;
 use Bunny\Channel;
 use Bunny\Async\Client;
 use Bunny\Message;
