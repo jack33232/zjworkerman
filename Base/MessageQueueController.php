@@ -7,6 +7,7 @@ use ZJPHP\Base\Event;
 use ZJPHP\Base\Kit\ArrayHelper;
 use ZJPHP\Service\NotifyCenter;
 use ZJPHP\Facade\Security;
+use ZJPHP\Facade\Database;
 use ZJWorkerman\Facade\MQConsumer;
 use League\CLImate\CLImate;
 use Workerman\Worker;
@@ -17,22 +18,23 @@ use Bunny\Message;
 
 class MessageQueueController extends Controller
 {
-    protected $processor_addr;
+    protected $processorAddr;
 
     public function run()
     {
         $args = func_get_args();
-        if (count($args) === 1 && ($args[0] instanceof CLImate)) {
-            $args = $this->getCliArgs();
-        }
 
         $worker = $args[0];
         $queue = $args[1];
         $routing_keys = $args[2];
-        $this->processor_addr = $args[3];
-
+        $this->processorAddr = $args[3];
 
         MQConsumer::start($worker, $queue, $routing_keys, [$this, 'processMessage']);
+    }
+
+    public function getProcessorLink()
+    {
+        return new AsyncTcpConnection('tcp://' . $this->processorAddr);
     }
 
     public function processMessage(Message $message, Channel $channel, Client $client)
@@ -42,31 +44,35 @@ class MessageQueueController extends Controller
         if (!$this->messageCheck($message)) {
             $channel->nack($message, false, false);
             MQConsumer::updateMessageLog($message_log_id, -1);
-            return;
+        } else {
+            $processor_link = $this->getProcessorLink();
+
+            $processor_link->onConnect = function ($processor_link) use ($message) {
+                $processor_link->send(trim($message->content) . "\n");
+            };
+            $processor_link->onMessage = function ($processor_link, $response) use ($channel, $message, $message_log_id) {
+                $data = json_decode(trim($response), true);
+                if (!empty($data['success'])) {
+                    $channel->ack($message);
+                    MQConsumer::updateMessageLog($message_log_id, 1);
+                } else {
+                    $requeue = !empty($data['requeue']) ? true : false;
+                    $channel->nack($message, false, $requeue);
+                    MQConsumer::updateMessageLog($message_log_id, -1);
+                }
+                Database::disconnect('all connections');
+            };
+
+            $processor_link->onError = function ($processor_link, $code, $msg) use ($channel, $message, $message_log_id) {
+                $channel->nack($message, false, false);
+                MQConsumer::updateMessageLog($message_log_id, -1);
+                Database::disconnect('all connections');
+            };
+
+            $processor_link->connect();
         }
 
-        $processor_link = new AsyncTcpConnection('tcp://' . $this->processor_addr);
-
-        $processor_link->onConnect = function ($processor_link) use ($message) {
-            $processor_link->send(trim($message->content) . "\n");
-        };
-        $processor_link->onMessage = function ($processor_link, $response) use ($channel, $message, $message_log_id) {
-            $data = json_decode(trim($response), true);
-            if (!empty($data['success'])) {
-                $channel->ack($message);
-                MQConsumer::updateMessageLog($message_log_id, 1);
-            } else {
-                $requeue = !empty($data['requeue']) ? true : false;
-                $channel->nack($message, false, $requeue);
-                MQConsumer::updateMessageLog($message_log_id, -1);
-            }
-        };
-
-        $processor_link->onError = function ($processor_link, $code, $msg) use ($channel, $message, $message_log_id) {
-            $channel->nack($message, false, true);
-            MQConsumer::updateMessageLog($message_log_id, -1);
-        };
-        $processor_link->connect();
+        Database::disconnect('all connections');
     }
 
     protected function messageCheck(Message $message)
@@ -86,10 +92,5 @@ class MessageQueueController extends Controller
         }
 
         return true;
-    }
-
-    protected function getCliArgs($climate)
-    {
-        // TBD
     }
 }

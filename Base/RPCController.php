@@ -26,9 +26,7 @@ class RPCController extends Controller
     public function run()
     {
         $args = func_get_args();
-        if (count($args) === 1 && ($args[0] instanceof CLImate)) {
-            $args = $this->getCliArgs();
-        }
+
         $connection = $args[0];
         $message = trim($args[1]);
 
@@ -58,10 +56,5 @@ class RPCController extends Controller
         }
 
         $connection->send(json_encode($result));
-    }
-
-    protected function getCliArgs($climate)
-    {
-        // TBD
     }
 }

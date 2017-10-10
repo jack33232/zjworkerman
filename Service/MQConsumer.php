@@ -205,4 +205,9 @@ class MQConsumer extends Component
     {
         $this->exchange = $exchange;
     }
+
+    public function __destruct()
+    {
+        $this->stop();
+    }
 }
