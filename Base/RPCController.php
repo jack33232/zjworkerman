@@ -48,7 +48,7 @@ class RPCController extends Controller
             $event = new Event($payload);
             $debugger = ZJPHP::$app->get('debugger');
             $debugger->trigger(Debugger::EVENT_RUNTIME_ERROR_HAPPEN, $event);
-            $result =  ['success' => false, 'requeue' => false];
+            $result = ['success' => false, 'requeue' => false];
         }
 
         if ($result['success']) {
