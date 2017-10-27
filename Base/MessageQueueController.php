@@ -39,9 +39,11 @@ class MessageQueueController extends Controller
 
     public function processMessage(Message $message, Channel $channel, Client $client)
     {
-        $message_log_id = MQConsumer::logMessage($message);
+        $message_data = MQConsumer::logMessage($message);
+        $message_signature = $message_data['signature'];
+        $message_log_id = $message_data['id'];
 
-        if (!$this->messageCheck($message)) {
+        if (!$this->messageCheck($message_data)) {
             $channel->nack($message, false, false);
             MQConsumer::updateMessageLog($message_log_id, -1);
         } else {
@@ -50,21 +52,22 @@ class MessageQueueController extends Controller
             $processor_link->onConnect = function ($processor_link) use ($message) {
                 $processor_link->send(trim($message->content) . "\n");
             };
-            $processor_link->onMessage = function ($processor_link, $response) use ($channel, $message, $message_log_id) {
+            $processor_link->onMessage = function ($processor_link, $response) use ($channel, $message, $message_log_id, $message_signature) {
                 $data = json_decode(trim($response), true);
                 if (!empty($data['success'])) {
                     $channel->ack($message);
                     MQConsumer::updateMessageLog($message_log_id, 1);
                 } else {
-                    $requeue = !empty($data['requeue']) ? true : false;
+                    $requeue = !empty($data['requeue']) && MQConsumer::checkRetry($message_signature);
                     $channel->nack($message, false, $requeue);
                     MQConsumer::updateMessageLog($message_log_id, -1);
                 }
                 Database::disconnect('all connections');
             };
 
-            $processor_link->onError = function ($processor_link, $code, $msg) use ($channel, $message, $message_log_id) {
-                $channel->nack($message, false, false);
+            $processor_link->onError = function ($processor_link, $code, $msg) use ($channel, $message, $message_log_id, $message_signature) {
+                $requeue = MQConsumer::checkRetry($message_signature);
+                $channel->nack($message, false, $requeue);
                 MQConsumer::updateMessageLog($message_log_id, -1);
                 Database::disconnect('all connections');
             };
@@ -75,15 +78,12 @@ class MessageQueueController extends Controller
         Database::disconnect('all connections');
     }
 
-    protected function messageCheck(Message $message)
+    protected function messageCheck($message_data)
     {
         // Verify the signature
-        $envelope = json_decode($message->content, true);
-        $message_content = $envelope['content'];
-        $message_signature = $envelope['signature'];
-        $signature_alg = $envelope['alg'];
+        $message_signature = $message_data['signature'];
 
-        if ($message_signature !== Security::hash($message_content, $signature_alg)) {
+        if ($message_signature !== Security::hash($message_data['message_content'], $message_data['alg'])) {
             return false;
         }
         // Check duplicate

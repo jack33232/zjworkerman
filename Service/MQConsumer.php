@@ -24,6 +24,7 @@ class MQConsumer extends Component
     protected $qos = 1;
     protected $msgPoolTtl = 2592000; // 30 days
     protected $exchange = '';
+    protected $maxRetryTimes = 10;
 
     private $_client = null;
 
@@ -124,20 +125,42 @@ class MQConsumer extends Component
         })->done();
     }
 
+    public function checkRetry($message_signature)
+    {
+        $redis_client = ZJRedis::connect();
+        $key = "MQRetryCounter:" . $message_signature;
+        $existed = $redis_client->exists($key);
+        $retry_times = $redis_client->incr($key);
+        if (!$existed) {
+            $redis_client->expire($key, 1800); // Retry counter ttl 30 mins
+        }
+        $result = $retry_times <= $this->maxRetryTimes;
+
+        if ($result === false) {
+            $error_msg = 'Message retry times exceeds ' . $this->maxRetryTimes
+                . ' on Application - ' . ZJPHP::$app->getAppName()
+                . ' with message signature ' . $message_signature;
+            trigger_error($error_msg, E_USER_WARNING);
+        }
+
+        return $result;
+    }
+
     public function logMessage(Message $message)
     {
         $envelope = json_decode($message->content, true);
-        $message_content = $envelope['content'];
-        $message_signature = $envelope['signature'];
 
         $data = [
             'binding_key' => $message->routingKey,
-            'message_content' => $message_content,
-            'signature' => $message_signature,
+            'message_content' => $envelope['content'],
+            'signature' => $envelope['signature'],
             'created_at' => date('Y-m-d H:i:s')
         ];
 
-        return Database::table('recieved_message_queue')->insertGetId($data);
+        $data['id'] = Database::table('recieved_message_queue')->insertGetId($data);
+        $data['alg'] = $envelope['alg'];
+
+        return $data;
     }
 
     public function updateMessageLog($message_log_id, $ack_or_nack)
@@ -199,6 +222,15 @@ class MQConsumer extends Component
         }
 
         $this->msgPoolTtl = $ttl;
+    }
+
+    public function setMaxRetryTimes($max_retry_times)
+    {
+        if (!is_numeric($max_retry_times) && $max_retry_times > 999) {
+            throw new InvalidConfigException('Max Retry Times invalid.');
+        }
+
+        $this->maxRetryTimes = $max_retry_times;
     }
 
     public function setExchange($exchange)
